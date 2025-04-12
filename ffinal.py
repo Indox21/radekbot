@@ -18,7 +18,7 @@ OPENROUTER_API_KEY = os.environ.get("sk-or-v1-0d6c5dfa208db832b6b89679f930e6fba1
 MODEL = "deepseek/deepseek-chat"
 
 PORT = int(os.environ.get("PORT", "8080"))
-WEBHOOK_URL = os.environ.get("https://radekbot-4.onrender.com")  # укажи в Render env: https://твоё-приложение.onrender.com
+WEBHOOK_URL = os.environ.get("https://radekbot-5.onrender.com")  # укажи в Render env: https://твоё-приложение.onrender.com
 
 # ==== СОСТОЯНИЯ РАДЬКА ====
 MODES = ["буйный", "шизик", "философ", "шутник", "сломанный"]

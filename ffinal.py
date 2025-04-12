@@ -3,22 +3,22 @@ import asyncio
 import random
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
-from telegram.ext import Application
-from telegram.ext import CallbackContext
-from telegram.ext import CommandHandler
+from telegram.ext import (
+    ApplicationBuilder, ContextTypes,
+    MessageHandler, filters,
+    Application
+)
 import requests
-from flask import Flask, request
 
 # ==== НАСТРОЙКИ ====
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-OPENROUTER_API_KEY = OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 MODEL = "deepseek/deepseek-chat"
 
 PORT = int(os.environ.get("PORT", "8080"))
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL") # укажи в Render env: https://твоё-приложение.onrender.com
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")  # https://твоё-приложение.onrender.com
 
 # ==== СОСТОЯНИЯ РАДЬКА ====
 MODES = ["буйный", "шизик", "философ", "шутник", "сломанный"]
@@ -115,8 +115,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = message.text
     chat_id = update.effective_chat.id
 
-    context.application.chat_ids.add(chat_id)
-
     msg_lower = user_message.lower()
     reply_to_bot = message.reply_to_message and message.reply_to_message.from_user.username == context.bot.username
     tagged = "@neirolenya_bot" in msg_lower or "радек" in msg_lower or "радёк" in msg_lower
@@ -139,29 +137,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Ошибка генерации: {e}")
         await message.reply_text("Ща посижу в углу... кукушка щёлкает.")
 
-# ==== ЗАПУСК БОТА С ВЕБХУКОМ ====
-app = Flask(__name__)
-telegram_app: Application = ApplicationBuilder().token(BOT_TOKEN).build()
-telegram_app.chat_ids = set()
-telegram_app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-
-@app.route(f"/{BOT_TOKEN}", methods=["POST"])
-async def webhook():
-    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
-    await telegram_app.update_queue.put(update)
-    return "ok"
-
+# ==== ЗАПУСК С ВЕБХУКОМ ====
 async def main():
     logging.basicConfig(level=logging.INFO)
-    await telegram_app.bot.delete_webhook()
-    await telegram_app.bot.set_webhook(url=f"{WEBHOOK_URL}/{BOT_TOKEN}")
-    await telegram_app.initialize()
-    await telegram_app.start()
-    print("✅ Радёк вылез через webhook.")
-    await telegram_app.updater.start_polling()  # чтобы запускать обработку очереди
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+    await app.initialize()
+    await app.bot.set_webhook(f"{WEBHOOK_URL}/{BOT_TOKEN}")
+    await app.start()
+    await app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        webhook_path=f"/{BOT_TOKEN}"
+    )
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.create_task(main())
-    app.run(host="0.0.0.0", port=PORT)
-
+    asyncio.run(main())

@@ -185,8 +185,19 @@ if __name__ == '__main__':
 
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), add_chat_id))
 
-    print("✅ Радёк вылез в чат.")
-    loop = asyncio.get_event_loop()
-  # loop.create_task(auto_message_task(app))
-    loop.run_until_complete(app.run_polling())
+    print("✅ Радёк слушает по вебхуку")
+
+    async def main():
+        await app.initialize()
+        await app.bot.delete_webhook()  # Очистим, если раньше что-то стояло
+        await app.start()
+        await app.updater.start_webhook(
+            listen="0.0.0.0",
+            port=10000,
+            url_path="",
+            webhook_url="https://radekbot-1.onrender.com"
+        )
+        await app.updater.idle()
+
+    asyncio.run(main())
 

@@ -11,6 +11,7 @@ from telegram.ext import (
     Application
 )
 import requests
+from aiohttp import web  # 👈 добавили
 
 # ==== НАСТРОЙКИ ====
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -137,7 +138,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Ошибка генерации: {e}")
         await message.reply_text("Ща посижу в углу... кукушка щёлкает.")
 
-# ==== ЗАПУСК С ВЕБХУКОМ ====
+# ==== ЗАГЛУШКА ДЛЯ RENDER ====
+async def dummy_healthcheck(request):
+    return web.Response(text="Радёк на связи 😎")
+
+def start_dummy_server():
+    app = web.Application()
+    app.router.add_get("/", dummy_healthcheck)
+    web.run_app(app, port=PORT)
+
+# ==== ЗАПУСК ====
 async def main():
     logging.basicConfig(level=logging.INFO)
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -152,4 +162,6 @@ async def main():
     )
 
 if __name__ == "__main__":
+    threading = __import__('threading')
+    threading.Thread(target=start_dummy_server).start()
     asyncio.run(main())

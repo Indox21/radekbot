@@ -195,7 +195,7 @@ if __name__ == '__main__':
             listen="0.0.0.0",
             port=10000,
             url_path="",
-            webhook_url="https://radekbot-1.onrender.com"
+            webhook_url="https://radekbot-2.onrender.com"
         )
         await app.updater.idle()
 

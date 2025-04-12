@@ -12,17 +12,21 @@ import requests
 BOT_TOKEN = "7478278605:AAFP8aVEDX1W8XRtfFXhJY7vTS1FFUgQLtA"
 OPENROUTER_API_KEY = "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"
 MODEL = "deepseek/deepseek-chat"
+WEBHOOK_URL = "https://radekbot-3.onrender.com"
+PORT = 10000
 
-# ==== СОСТОЯНИЯ РАДЬКА ====
+# ==== СОСТОЯНИЯ ====
 MODES = ["буйный", "шизик", "философ", "шутник", "сломанный"]
 current_mode = random.choice(MODES)
+last_messages = []
+last_active_time = datetime.utcnow()
 
 def switch_mode():
     global current_mode
     current_mode = random.choice(MODES)
 
-# ==== ПРИМЕРЫ ФРАЗ ====
-BUILTIN_EXAMPLES = [
+# ==== ФРАЗЫ ====
+BUILTIN_QUOTES = [
     "Смотри ты назвал меня вафлей, ты меня чморишь...",
     "Ты не человек, Раиль",
     "Свинья ты ебаная",
@@ -31,118 +35,105 @@ BUILTIN_EXAMPLES = [
     "Называйте меня теперь пиченья"
 ]
 
-def load_json_quotes():
+def load_custom_quotes():
     if os.path.exists("radek_quotes.json"):
         try:
             with open("radek_quotes.json", "r", encoding="utf-8") as f:
                 data = json.load(f)
-                if isinstance(data, list):
-                    return [str(q).strip() for q in data if isinstance(q, str)]
+                return [q.strip() for q in data if isinstance(q, str)]
         except Exception as e:
-            print(f"⚠️ Ошибка при загрузке radek_quotes.json: {e}")
+            print(f"⚠️ Ошибка загрузки цитат: {e}")
     return []
 
-def get_all_examples():
-    return BUILTIN_EXAMPLES + load_json_quotes()
+def get_all_quotes():
+    return BUILTIN_QUOTES + load_custom_quotes()
 
-# ==== ПРОМТ ====
+# ==== ПОДГОТОВКА ПРОМПТА ====
 def generate_prompt():
-    examples = get_all_examples()
-    base = (
-        "Ты — Радёк. Реальный пацан, дерзкий, нестабильный, но свой. "
-        "Отвечай коротко, иногда без пунктуации. Ты простой парень из Ульяновска, работаешь в Победе. "
-        "Часто вспоминаешь прошлое, друзей, бухло. Вот примеры:\n"
+    examples = "\n".join(f"- {quote}" for quote in get_all_quotes())
+    base_prompt = (
+        "Ты — Радёк. Реальный пацан из Ульяновска. Дерзкий, грубый, но с душой. "
+        "Короткие ответы, минимум пунктуации. Работаешь в Победе, вспоминаешь детство, друзей, пьянки.\n"
+        "Вот примеры:\n" + examples + "\n"
     )
-    examples_text = "\n".join(f"- {ex}" for ex in examples)
-    mode_prompts = {
-        "буйный": "Ты агрессивный, посылаешь, но с душой.",
-        "шизик": "Пишешь скачками, абсурдно, смешно и жёстко.",
-        "философ": "Пишешь с душой, вспоминаешь, философствуешь.",
-        "шутник": "Тупишь, шутишь абсурдно: «я член?», «пельмень из ада».",
-        "сломанный": "Тебе больно, ты рефлексируешь, но по-доброму."
-    }
-    return base + examples_text + "\n" + mode_prompts[current_mode]
+    mode_addon = {
+        "буйный": "Ты агрессивный и посылаешь, но не по злу.",
+        "шизик": "Отвечаешь абсурдно, несвязно, местами жутко.",
+        "философ": "Пишешь с душой, ностальгируешь, философствуешь.",
+        "шутник": "Шутишь нелепо: 'я член?', 'пельмень в аду'.",
+        "сломанный": "Ты уставший, добрый, немного потерянный."
+    }[current_mode]
+    return base_prompt + mode_addon
 
-# ==== ЗАПРОС В OPENROUTER ====
-async def get_response_from_openrouter(message_text):
+# ==== ОТВЕТ ЧЕРЕЗ OPENROUTER ====
+async def ask_openrouter(text):
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
-    data = {
+    payload = {
         "model": MODEL,
         "messages": [
             {"role": "system", "content": generate_prompt()},
-            {"role": "user", "content": message_text}
+            {"role": "user", "content": text}
         ]
     }
 
     try:
-        response = requests.post(url, headers=headers, json=data)
-        result = response.json()
-        return result["choices"][0]["message"]["content"]
+        resp = requests.post(url, headers=headers, json=payload, timeout=15)
+        return resp.json()["choices"][0]["message"]["content"]
     except Exception as e:
-        print("❌ Ошибка:", e)
-        return "Брат, чёт мне хуёво, не могу ответить сейчас..."
+        print(f"❌ Ошибка OpenRouter: {e}")
+        return "Брат, чёт мне хуёво, не могу сейчас..."
 
-# ==== НАСТРОЕНИЕ ====
-last_messages = []
-last_active_time = datetime.utcnow()
-
+# ==== НАСТРОЕНИЕ ПО ПОСЛЕДНИМ СООБЩЕНИЯМ ====
 def analyze_mood(messages):
-    mood = "норм"
-    joined = " ".join(messages).lower()
-    if any(word in joined for word in ["грустно", "тоска", "депрессия", "сука", "одиноко"]):
-        mood = "грусть"
-    elif any(word in joined for word in ["ахах", "угар", "лол", "жиза"]):
-        mood = "угар"
-    elif any(word in joined for word in ["нахуй", "блядь", "ебать"]):
-        mood = "жёстко"
-    return mood
+    text = " ".join(messages).lower()
+    if any(w in text for w in ["грустно", "тоска", "депрессия", "одиноко"]):
+        return "грусть"
+    elif any(w in text for w in ["ахах", "угар", "жиза"]):
+        return "угар"
+    elif any(w in text for w in ["нахуй", "блядь", "ебать"]):
+        return "жёстко"
+    return "норм"
 
-# ==== ОБРАБОТКА ====
+# ==== ОБРАБОТКА СООБЩЕНИЙ ====
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global last_messages, last_active_time
-    message = update.message
-    user_message = message.text
-    chat_id = update.effective_chat.id
 
+    msg = update.message
+    text = msg.text
+    chat_id = update.effective_chat.id
     context.application.chat_ids.add(chat_id)
 
-    # Проверка на тег
-    msg_lower = user_message.lower()
-    reply_to_bot = message.reply_to_message and message.reply_to_message.from_user.username == context.bot.username
-    tagged = "@neirolenya_bot" in msg_lower or "радек" in msg_lower or "радёк" in msg_lower
+    tagged = any(w in text.lower() for w in ["радек", "радёк", "@neirolenya_bot"]) or \
+             (msg.reply_to_message and msg.reply_to_message.from_user.username == context.bot.username)
 
-    if not (tagged or reply_to_bot) and random.random() > 0.05:
+    if not tagged and random.random() > 0.05:
         return
 
-    print(f"[{chat_id}] {update.effective_user.first_name}: {user_message}")
-    last_active_time = datetime.utcnow()
-    last_messages.append(user_message)
+    print(f"[{chat_id}] {update.effective_user.first_name}: {text}")
+    last_messages.append(text)
     if len(last_messages) > 10:
         last_messages = last_messages[-10:]
-
+    last_active_time = datetime.utcnow()
     switch_mode()
 
-    try:
-        reply_text = await get_response_from_openrouter(user_message)
-        await message.reply_text(reply_text)
-    except Exception as e:
-        logging.error(f"Ошибка генерации: {e}")
-        await message.reply_text("Ща посижу в углу... кукушка щёлкает.")
+    reply = await ask_openrouter(text)
+    await msg.reply_text(reply)
 
-# ==== АВТОСООБЩЕНИЯ ====
-async def auto_message_task(app):
+# ==== АВТО-РЕПЛИКИ ====
+async def auto_reply_task(app):
     global last_active_time
+
     await asyncio.sleep(10)
     while True:
         await asyncio.sleep(30)
         if datetime.utcnow() - last_active_time > timedelta(minutes=5):
             switch_mode()
             mood = analyze_mood(last_messages)
-            auto_lines = {
+            lines = {
                 "грусть": [
                     "Бля, как будто мы опять в девятом классе. Только теперь никого нет.",
                     "Тоска, пацаны. Обнял бы, да некого...",
@@ -164,40 +155,33 @@ async def auto_message_task(app):
                     "Всё по кайфу. Даже если грустно."
                 ]
             }
-            text = random.choice(auto_lines[mood])
             for chat in app.chat_ids:
                 try:
-                    await app.bot.send_message(chat_id=chat, text=text)
+                    await app.bot.send_message(chat, text=random.choice(lines[mood]))
                 except Exception as e:
                     logging.warning(f"Не удалось отправить сообщение в чат {chat}: {e}")
             last_active_time = datetime.utcnow()
 
 # ==== ЗАПУСК ====
-if __name__ == '__main__':
+if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-
     app.chat_ids = set()
 
-    async def add_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        app.chat_ids.add(update.effective_chat.id)
-        await handle_message(update, context)
-
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), add_chat_id))
-
-    print("✅ Радёк слушает по вебхуку")
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     async def main():
         await app.initialize()
-        await app.bot.delete_webhook()  # Очистим, если раньше что-то стояло
+        await app.bot.delete_webhook()
         await app.start()
         await app.updater.start_webhook(
             listen="0.0.0.0",
-            port=10000,
+            port=PORT,
             url_path="",
-            webhook_url="https://radekbot-2.onrender.com"
+            webhook_url=WEBHOOK_URL
         )
+        asyncio.create_task(auto_reply_task(app))
+        print("✅ Радёк слушает по вебхуку")
         await app.updater.idle()
 
     asyncio.run(main())
-

@@ -13,12 +13,12 @@ import requests
 from flask import Flask, request
 
 # ==== НАСТРОЙКИ ====
-BOT_TOKEN = os.environ.get("7478278605:AAFP8aVEDX1W8XRtfFXhJY7vTS1FFUgQLtA")
-OPENROUTER_API_KEY = os.environ.get("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")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+OPENROUTER_API_KEY = OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 MODEL = "deepseek/deepseek-chat"
 
 PORT = int(os.environ.get("PORT", "8080"))
-WEBHOOK_URL = os.environ.get("https://radekbot-5.onrender.com")  # укажи в Render env: https://твоё-приложение.onrender.com
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL") # укажи в Render env: https://твоё-приложение.onrender.com
 
 # ==== СОСТОЯНИЯ РАДЬКА ====
 MODES = ["буйный", "шизик", "философ", "шутник", "сломанный"]
